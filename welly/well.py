@@ -119,7 +119,7 @@ class Well(object):
         return getattr(self.header, 'uwi', None) or ''
 
     @classmethod
-    def from_lasio(cls, l, remap=None, funcs=None, data=True, req=None, alias=None, fname=None):
+    def from_lasio(cls, l, remap=None, funcs=None, data=True, req=None, alias=None, fname=None, index=None):
         """
         Constructor. If you already have the lasio object, then this makes a
         well object from it.
@@ -132,10 +132,24 @@ class Well(object):
             data (bool): Whether to load curves or not.
             req (dict): An alias list, giving all required curves. If not
                 all of the aliases are present, the well is empty.
+            index (str): Optional. Either "existing" (use the index as found in
+                the LAS file) or "m", "ft" to use lasio's conversion of the
+                relevant index unit.
 
         Returns:
             well. The well object.
         """
+        if index is None:
+            index = "m"  # Retain backwards compatibility.
+        if index == "existing":
+            index_attr = "index"
+        elif "m" in index.lower():
+            index_attr = "depth_m"
+        elif "f" in index.lower():
+            index_attr = "depth_ft"
+        else:
+            raise KeyError("index must be 'existing', 'm', or 'ft'")
+
         # Build a dict of curves.
         curve_params = {}
         for field, (sect, code) in LAS_FIELDS['data'].items():
@@ -153,10 +167,11 @@ class Well(object):
             reqs = utils.flatten_list([v for k, v in alias.items() if k in req])
 
         # Using lasio's index property for depth values:
-        if l.index[0] < l.index[1]:
-            curve_params['depth'] = l.index
+        l_index = getattr(l, index_attr)
+        if l_index[0] < l_index[1]:
+            curve_params['depth'] = l_index
         else:
-            curve_params['depth'] = np.flipud(l.index)
+            curve_params['depth'] = np.flipud(l_index)
 
         # Make the curve dictionary.
         depth_curves = ['DEPT', 'TIME']
@@ -211,7 +226,8 @@ class Well(object):
                  req=None,
                  alias=None,
                  encoding=None,
-                 printfname=False
+                 printfname=False,
+                 index=None
                  ):
         """
         Constructor. Essentially just wraps ``from_lasio()``, but is more
@@ -224,6 +240,9 @@ class Well(object):
                 implementing a transform before loading. Can be a lambda.
             printfname (bool): prints filename before trying to load it, for 
                 debugging
+            index (str): Optional. Either "existing" (use the index as found in
+                the LAS file) or "m", "ft" to use lasio's conversion of the
+                relevant index unit.
 
         Returns:
             well. The well object.
@@ -233,7 +252,7 @@ class Well(object):
         l = lasio.read(fname, encoding=encoding)
 
         # Pass to other constructor.
-        return cls.from_lasio(l, remap=remap, funcs=funcs, data=data, req=req, alias=alias, fname=fname)
+        return cls.from_lasio(l, remap=remap, funcs=funcs, data=data, req=req, alias=alias, fname=fname, index=index)
 
     def df(self, keys=None, basis=None, uwi=False):
         """
